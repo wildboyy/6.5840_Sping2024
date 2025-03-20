@@ -10,8 +10,6 @@ MapReduce（MR）是一种编程模型 & 其相关的实现。MR能处理&生成
 
 是谷歌公司提出的
 
-
-
 ## 1、Introduction
 
 过去5年，google实现了很多特殊的计算过程，网页请求日志，倒排索引，最频繁请求集。这些都是看起来很好理解的问题，但是由于数据量过于巨大，完全无法单机完成，必须在多台机子上并行计算，才能在可接受的时间内完成计算。但是，如何分配计算，如何处理节点故障，使得原本在单机上解决这些问题的简单的代码，变得非常复杂。
@@ -27,8 +25,6 @@ MR让用户只用实现 Map 和 Reduce 即可，完全屏蔽了底层和分布�
 - 第六部分：探讨了google内部使用mapreduce的经验
 - 第七部分：讨论了相关的和未来的工作
 
-
-
 ## 2、Programming Model
 
 整个计算流程以一系列键值对作为输入，输出一系列键值对。MR的调用者只需要定义Map和Reduce即可
@@ -43,19 +39,19 @@ Reduce：接收一个key，以及和这个key相关的values。将这些values�
 
 ```go
 map (String key, String value) {
-		// key: document name
-		// value: document contents
-		for each word w in value:
-				EmitIntermediate(w, "1");
+        // key: document name
+        // value: document contents
+        for each word w in value:
+                EmitIntermediate(w, "1");
 }
 
 reduce (String key, Iterator values) {
-		// key: a word
-		// values: a list of counts
-		int result = 0;
-		for each v in values:
-				result += ParseInt(v);
-		Emit(AsString(result));
+        // key: a word
+        // values: a list of counts
+        int result = 0;
+        for each v in values:
+                result += ParseInt(v);
+        Emit(AsString(result));
 }
 ```
 
@@ -66,7 +62,7 @@ reduce统计特定单词的计数，并输出计数
 除此之外，用户还要在代码里写和输入输出文件名相关的信息，还有一些可选的调优参数。
 
 > the user writes code to fill in a mapreduce specification object with the names of the input and output files, and optional tuning parameters. The user then invokes the MapReduce function, passing it the specification object.
->
+> 
 > （引用原文是因为没看懂）
 
 ### 2.2 Types
@@ -76,7 +72,7 @@ reduce统计特定单词的计数，并输出计数
 例如：map输入和reduce输出的KV是不同类型，但是中间结果（map的输出）和reduce输出的KV是同类型 
 
 > Even though the previous pseudo-code is written in terms of string inputs and outputs, conceptually the map and reduce functions supplied by the user have associated types
->
+> 
 > I.e., the input keys and values are drawn from a different domain than the output keys and values. Furthermore, the intermediate keys and values are from the same domain as the output keys and values.
 
 ### 2.3 More Examples
@@ -112,10 +108,6 @@ map读取文件，输出< 单词，文件id >, reduce手机统一单词的所有
 **分布式排序：**
 
 > The map function extracts the key from each record, and emits a <key, record> pair. The reduce function emits all pairs unchanged. This computation depends on the partitioning facilities described in Section 4.1 and the ordering properties described in Section 4.2.
-
-
-
-
 
 ## 3、Implementation
 
@@ -157,21 +149,15 @@ Figure1（原文的图一）展示了MR的整个流程，当用户程序调用MR
 
 完成后，MR的执行结果在R个输出文件中。通常，用户不需要将R份输出文件整成一个，而是将其作为一个新的MR任务的输入数据，或者用作另一个分布式应用的输入。
 
-
-
 ### 3.2 Master Data Structures
 
 master保存一些数据结构，对于每个map和reduce任务，master存储其状态（空闲，运行中，完成），以及正在执行该任务的机器id
 
 master充当一个通道，通过他，中间文件的位置信息能从map任务传递到reduce任务。因此，对于每个完成的map任务，master存储其文件位置和文件大小。这些信息推送给正在干活的reduce worker
 
-
-
 ### 3.3 Fault Tolerance
 
 上千台机器干活，必须优雅的容错
-
-
 
 **Worker Failure**
 
@@ -185,15 +171,11 @@ master周期的ping 所有worker，一段时间没回应的worker会被认为宕
 
 MR是能容忍大面积宕机。例如，某种原因导致80台机子几分钟内无法访问，MR只需要将这些机子上的任务分配给其他的机子重新执行即可，最终完成任务
 
-
-
 **Master Failure**
 
 可以让master周期性的将自己的数据结构（状态）写出，这样当一个master死了，可以重启一个master读入最新的状态并执行。
 
 然而，鉴于只有一个master节点，宕机的可能性也不大。因此，我们的实现中不考虑master宕机情况，如果master真死了，直接重启整个MR任务吧。
-
-
 
 **Semantics in the Presence of Failures** （失败存在下的语义学？）
 
@@ -206,16 +188,12 @@ MR是能容忍大面积宕机。例如，某种原因导致80台机子几分钟�
 我们绝大多数的映射（map）和化简（reduce）操作符都是确定性的，并且在这种情况下，我们的语义等同于顺序执行这一事实，使得程序员能够非常轻松地推断其程序的行为。当映射（map）和 / 或化简（reduce）操作符是非确定性的时候，我们会提供相对较弱但仍然合理的语义。
 
 > In the presence of non-deterministic operators, the output of a particular reduce task R1 is equivalent to the output for R1 produced by a sequential execution of the non-deterministic program. However, the output for a different reduce task R2 may correspond to the output for R2 produced by a different sequential execution of the non-deterministic program.
->
+> 
 > ps：不太懂这一段，大概就是说MR计算结果的确定性和用户定义的map reduce函数的确定性有关。
-
-
 
 ### 3.4 Locality
 
 网络带宽在我们的计算环境中是相对稀缺的资源。我们利用输入数据本地存储的特点，来节省带宽。GFS将每个文件分为多个64MB的块，每个块存储多份拷贝（通常是三份拷贝）在不同机器上。master会尝试将map任务分配给本地有对应数据的worker，这样就不用传输数据了，或者分配给靠近数据存储位置的worker（例如和数据存储在同一个局域网中的worker）。当在集群中相当一部分工作节点上运行大规模的 MapReduce 操作时，大部分输入数据是在本地读取的，不会占用网络带宽。
-
-
 
 ### 3.5 Task Granularity（任务粒度）
 
@@ -231,8 +209,6 @@ O (M * R) 的空间复杂度来存储状态 （为什么！！！）
 
 此外，R通常受到用户的限制，因为每个reduce都会输出一个文件，文件数量的增多可能导致文件系统性能下降。实际上，我们倾向于选择M的大小使得每个 map 任务的输入数据大小在 16MB - 64MB之间（有助于发挥3.4提到的局部性的优势），当 M 过分大时，会导致map任务的输入数据很小，会导致频繁的磁盘或者网络IO操作。
 
-
-
 ### 3.6 Backup Tasks
 
 会导致MR的总执行时间变长的一个常见的原因是：straggler（拖后腿者）。即一台花费异常长时间来完成最后几个任务的机器。有很多原因会导致“straggler”。例如：
@@ -241,8 +217,6 @@ O (M * R) 的空间复杂度来存储状态 （为什么！！！）
 2. 集群调度系统可能在某些机子上安排了其他任务，导致Mapreduce被分配的计算、存储、网络资源很少，从而执行很慢
 
 我们有一个通用的机制来缓解“拖后腿者”的问题，当一个MR操作快结束的时候，master会对剩余正在进行的任务安排备份执行。只要主执行或备份执行中的任何一个完成，该任务就会被标记为已完成。我们对这个机制进行过调优，使得它最多只增加额外几个百分点的资源占用。我们还发现这个机制能显著的减少大型MR操作。例如，排序（5.3会提到）如果不用这个机制，会慢44%！
-
-
 
 ## 4、Refinements（优化）
 
@@ -276,8 +250,6 @@ Combiner Function和 reduce function基本是一样的，唯一不同就是如�
 
 combiner function对于特定问题的性能提升是显著的
 
-
-
 ### 4.4 Input and Output Types
 
 MR 库支持读取几种不同格式的输入。例如，text类型的输入，会按照<行号，行内容>来读取并传递给map function
@@ -288,21 +260,15 @@ reader 不一定要从文件中读取数据。你可以很容易的定义一个r
 
 相似的，对于输出的处理也有不同的支持，用户也可以自定义。
 
-
-
 ### 4.5 Side-effects
 
 在某些情况下，MapReduce 的用户发现在其 Map 和 / 或 Reduce 操作中生成辅助文件作为额外输出很方便。这意味着用户除了获得常规的 MapReduce 输出结果外，还能创建一些辅助性的数据文件。例如，在处理日志数据时，用户可能希望在生成汇总统计结果的同时，创建一个包含特定异常记录的辅助文件，方便后续深入分析。
 
 但是，用户编写逻辑生成这些辅助文件的同时，需要确保文件生成具有原子性（要么成功生成要么什么都不生成）和幂等性（多次执行结果相同）。
 
-
-
 > We do not provide support for atomic two-phase commits of multiple output files produced by a single task. Therefore, tasks that produce multiple output files with cross-file consistency requirements should be deterministic. This restriction has never been an issue in practice.
->
+> 
 > 不太懂，大概意思是，一个任务生成多个文件的话，是不保证原子性的。用户需要自己想办法。但实际上，这并没有成为问题。
-
-
 
 ### 4.6 Skipping Bad Records
 
@@ -313,10 +279,8 @@ reader 不一定要从文件中读取数据。你可以很容易的定义一个r
 有的时候，忽略一些数据，对于结果没有太大影响。所以我们提供可选择的模式，在该模式下，MR会自动检测到导致程序卡住的数据，并且跳过他。
 
 > Each worker process installs a signal handler that catches segmentation violations and bus errors. Before invoking a user Map or Reduce operation, the MapReduce library stores the sequence number of the argument in a global variable. If the user code generates a signal, the signal handler sends a “last gasp” UDP packet that contains the sequence number to the MapReduce master. When the master has seen more than one failure on a particular record, it indicates that the record should be skipped when it issues the next re-execution of the corresponding Map or Reduce task.
->
+> 
 > 这是具体怎么跳过的
-
-
 
 ### 4.7 Local Execution
 
@@ -324,15 +288,11 @@ MR的debug非常困难，因为是分布式的，切任务的分配不是每次�
 
 我们也实现了单机版的MR，你可以换到单机上来debug
 
-
-
 ### 4.8 Status Information
 
 master内部运行一个HTTP服务，会输出MR运行时的状态信息，例如，多少任务完成了，输入总量，输出总量，日志连接，……
 
 用户可以通过这些信息更好的把握MR的执行过程，而不是干等着
-
-
 
 ### 4.9 Counters
 
@@ -345,10 +305,10 @@ Counter* uppercase;
 uppercase = GetCounter("uppercase");
 
 map(String name, String contents):
-	for each word w in contents:
-		if (IsCapitalized(w)):
-			uppercase->Increment();
-		EmitIntermediate(w, "1");
+    for each word w in contents:
+        if (IsCapitalized(w)):
+            uppercase->Increment();
+        EmitIntermediate(w, "1");
 ```
 
 worker产生的计数值会周期性的发送给master（数据直接附在对于master的ping响应中）
@@ -356,10 +316,6 @@ worker产生的计数值会周期性的发送给master（数据直接附在对�
 master统计所有的counter value。同时会在master status page（4.8）上显示。master保证统计正确，自动过滤重复计数（重复计数在备份执行（3.6）和 重新执行（3.3）时会发生）
 
 MR库会自动保存一些 counter value，例如处理的键值对总数/输出的键值对总数
-
-
-
-
 
 ## 5、Performance（性能）
 
@@ -387,8 +343,6 @@ grep扫描10^10 个 100字节记录，寻找一个三字符的pattern（这个pa
 
 figure2 展示了输入数据速率随时间的变化，开始时，随着越来越多的机器被分配任务，输入数据的速率持续增长。map阶段完成，输入数据的速率开始下降。整个过程大概150秒，包括1分钟左右的启动开销，启动开销主要源于两方面。一方面是将程序传播到所有工作机器上，这涉及到网络传输，将 MapReduce 程序代码分发到各个计算节点。另一方面，与 Google 文件系统（GFS）交互时存在延迟，包括打开 1000 个输入文件以及获取用于本地化优化所需的信息。本地化优化通常是为了将数据处理任务分配到距离数据存储位置较近的计算节点上，以减少数据传输开销，但这一过程会带来额外的延迟。
 
-
-
 ### 5.3 Sort
 
 没看懂它怎么排序的。。。
@@ -401,8 +355,6 @@ figure2 展示了输入数据速率随时间的变化，开始时，随着越来
 
 figure3(b)就是没有backup task的情况，可以看出和 a 的图形很接近，但是b有一个很长很细的尾巴，因为有少数几个worker在拖后腿
 
-
-
 ### 5.5 Machine Failures
 
 figure3(c)中，展示的是有200个宕机（其实机器还活着，只是进程被杀了）情况下的性能。计算开始的几分钟后，故意杀死200个工作进程。底层的集群调度系统，很快重启了这些任务。
@@ -410,8 +362,6 @@ figure3(c)中，展示的是有200个宕机（其实机器还活着，只是进�
 worker进程的死亡在图像上显示为输入速率的负增长，因为有些已经完成的map任务消失了。
 
 在有宕机的情况下，完成的总时间只慢了5%
-
-
 
 ## 6、Experience
 
@@ -439,10 +389,6 @@ worker进程的死亡在图像上显示为输入速率的负增长，因为有�
 1. 代码简单易懂
 2. 性能更好了
 3. 整体操作更简单（不用宕机，网络，straggler……）
-
-
-
-
 
 ## 7、Related Work
 

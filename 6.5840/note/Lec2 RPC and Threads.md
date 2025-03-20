@@ -4,8 +4,6 @@
 
 分布式系统的实现，实验中的go编程，go线程，网络爬虫，go rpc
 
-
-
 ### 为什么选择 Go 语言？
 
 - 对协程（轻量级线程）有很好的支持
@@ -16,9 +14,7 @@
 - 不太复杂
 - Go 语言常用于分布式系统中
 
-
-
-### 有没有线程的替代方案？ 
+### 有没有线程的替代方案？
 
 有，
 
@@ -27,8 +23,6 @@
 为每个活动（例如每个客户端请求）维护一个状态表。 有一个“事件”循环，它会： - 检查每个活动是否有新的输入（例如，来自服务器的响应到达）； - 为每个活动执行下一步操作； - 更新状态。 
 
 事件驱动编程可以实现 I/O 并发， 并且消除了线程开销（这种开销可能相当大）， 但无法利用多核处理器实现加速， 而且编程过程很痛苦。 
-
-
 
 ### 多线程挑战
 
@@ -47,47 +41,75 @@
 
 死锁？
 
+### Crawler(爬虫)
 
+**爬虫**：递归的去爬网页数据。随便给它一个起始网站，它递归地从网页内的连接去爬其他网站的数据。一个url只被爬一次，且不能陷入url循环中。
 
+**挑战**：
 
+- 充分利用并发
 
-### **Let's look at the tutorial's web crawler as a threading example.**
+- 一个URL只爬一次
 
----
+- 结束条件
 
-#### 什么是爬虫？
+课程代码 crawler.go 给了三种实现方式
 
-目标：获取所有网页，来喂给索引器
+- 单线程
 
-给一个初始网页，它递归的进入所有的链接，但是不重复返回同一个页面，也不会陷入循环链接
+- 并发，通过共享内存协作
 
+- 并发，通过channel协作
 
+## ConcurrentChannel crawler
 
-#### 爬虫的挑战：
+### Go channel
 
-利用IO并发：网络延迟影响很大，并行抓取网页，使用线程实现并发
+go通道，非常类似于OS中的PV原语
 
-每个URL只爬一次：避免浪费带宽，避免循环链接，记录已经访问的URL
+```go
+// channel是个对象
+// a channel lets one thread send an object 
+// to another thread
+ch := make(chan int)
 
-确定爬虫结束时间
+// the sender waits until some goroutine receives
+ch <- x
 
+// a receiver waits until some goroutine sends
+y := <- ch
 
+// y 循环从通道中获取对象，直到通道关闭，则退出循环
+for y := range ch
+```
 
-### 三种爬虫solution
+channel的发送和接受只**消耗不到1ms的时间**
 
-crawler.go提供了三种爬虫方案
+## 锁 vs channel
 
----
+什么情况用锁 + 共享内存？
 
-连续执行
+什么情况用通道？
 
-并发，通过共享数据控制
+**取决于程序员的思维模式：**
 
-并发，通过通道控制
+- ​**状态管理** → 共享数据 + 锁（`sync.Mutex`/`sync.RWMutex`）
+- ​**通信协调** → 通道（`channel`）
 
+## Remote procedure call（RPC）
 
+### rpc如何解决错误？
 
+#### 1、最大努力（at-least-once）
 
+call 方法等待回复，一段时间无回复则重新发送，循环这个过程几次，最终放弃并返回错误
 
+#### 2、最多一次 (at-most-once )
 
+服务端（被调用者）会记录请求id，并且避免重复执行。
 
+go rpc就是这种
+
+#### 3、精确一次（exactly once）
+
+无限重复call + 重复执行检测 + 容灾
