@@ -20,8 +20,6 @@
 
 2. get(k)
 
-
-
 ### 串行场景下
 
 ```python
@@ -38,8 +36,6 @@ class KVStore:
 
 串行场景下的 kv 存储很简单，程序员会对其有很直观的预期
 
-
-
 ### 可线性化场景
 
 与串行化不同，对程序的预期会产生分歧
@@ -52,13 +48,7 @@ class KVStore:
 
 get（x）应该返回 z
 
-
-
 我们会采用 线性一致性（**linearizability**）的模型来形式化定义并发操作的正确性
-
-
-
-
 
 ## 测试
 
@@ -67,8 +57,6 @@ get（x）应该返回 z
 那么如何用测试来确保程序正确性？
 
 可以尽可能的模拟一切操作，一切网络状况，一切意外情况，并测试足够多的次数，从而确保程序在大部分情况下是正确的。
-
-
 
 ### Ad-hoc testing
 
@@ -93,8 +81,6 @@ wait for threads
 
 但如果通过，也不能保证kv 存储一定是可线性化的
 
-
-
 ### 线性一致性测试
 
 如何测试分布式系统是否为可线性化
@@ -103,23 +89,15 @@ wait for threads
 
 所以通过记录整个历史来判断某次测试是否符合**线性一致性**
 
-
-
 但是！线性一致性检查是一个 NP完全问题
-
-
 
 可以将**子数组和**问题转化为**线性一致性检测**问题
 
 转化过程见：[转化](https://anishathalye.com/testing-distributed-systems-for-linearizability/#user-content-fn-specs-for-real-systemshttps://anishathalye.com/testing-distributed-systems-for-linearizability/#user-content-fn-specs-for-real-systems)
 
-
-
 ### 实现
 
 尽管线性一致性检查是NP完全问题，但在实践中，它对于小型历史记录可以很好地工作。线性一致性检查器的实现会接收一个执行序列和历史记录，然后运行搜索程序尝试构建线性化，同时采用各种技巧来限制搜索空间的规模。
-
-
 
 ## 有效性
 
@@ -132,5 +110,3 @@ Testing linearizable distributed systems using fault injection along with linear
 ad-hoc 能捕获一些严重的 bug，但是一些小 bug 就不行
 
 线性一致性测试能捕获所有的 bug，**作者如何尝试都没法写一个线性一致性测不出来的 bug**
-
-
