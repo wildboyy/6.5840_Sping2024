@@ -166,6 +166,77 @@ type RequestVoteReply struct {
 	VoteGranted bool
 }
 
+type AppendEntriesArgs struct {
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []Log
+	LeaderCommit int
+}
+type AppendEntriesReply struct {
+	Term    int
+	Success bool
+}
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	leaderTerm := args.Term
+
+	if leaderTerm >= rf.currentTerm {
+		reply.Success = true
+		reply.Term = leaderTerm
+		rf.role = FOLLOWER
+		rf.currentTerm = leaderTerm
+		rf.leaderExists = true
+
+	} else {
+		reply.Success = false
+		reply.Term = rf.currentTerm
+	}
+
+}
+
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
+func (rf *Raft) heartBeat() {
+	for !rf.killed() {
+
+		if rf.role != LEADER {
+			continue
+		}
+
+		size := len(rf.peers)
+		args := AppendEntriesArgs{}
+		args.Entries = make([]Log, 0)
+		args.Term = rf.currentTerm
+		me := rf.me
+
+		cnt := 1
+		for i := 0; i < size; i++ {
+			if i != me {
+				reply := AppendEntriesReply{}
+				ok := rf.sendAppendEntries(i, &args, &reply)
+				if ok && reply.Success {
+					cnt++
+				} else if reply.Term > rf.currentTerm {
+					rf.currentTerm = reply.Term
+					rf.role = FOLLOWER
+				}
+			}
+		}
+
+		if cnt <= size/2 {
+			rf.role = FOLLOWER
+		}
+
+		// 心跳间隔 100ms(lab3A 的提示中说不要超过 10次每秒）
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (3A, 3B).
@@ -177,13 +248,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if candidateTerm > rf.currentTerm {
 		rf.currentTerm = candidateTerm
 		rf.role = FOLLOWER
+		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
-	} else if candidateTerm == rf.currentTerm {
-		if rf.role == CANDIDATE || rf.role == LEADER {
-			reply.VoteGranted = false
-		} else {
-			reply.VoteGranted = true
-		}
+		rf.leaderExists = true
 	} else {
 		reply.VoteGranted = false
 	}
@@ -218,76 +285,22 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // capitalized all field names in structs passed over RPC, and
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
-func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply, voteChan chan *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	voteChan <- reply
 	return ok
 }
 
-type AppendEntriesArgs struct {
-	Term         int
-	LeaderId     int
-	PrevLogIndex int
-	PrevLogTerm  int
-	Entries      []Log
-	LeaderCommit int
-}
-type AppendEntriesReply struct {
-	Term    int
-	Success bool
-}
-
-func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	leaderTerm := args.Term
-
-	if leaderTerm < rf.currentTerm {
-		reply.Success = false
-		reply.Term = rf.currentTerm
-		return
-	} else {
-		reply.Success = true
-		reply.Term = leaderTerm
-		rf.currentTerm = leaderTerm
-		rf.leaderExists = true
-	}
-
-}
-
-func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	return ok
-}
-
-func (rf *Raft) heartBeat() {
-	for !rf.killed() {
-
-		rf.mu.Lock()
-
-		if rf.role != LEADER {
-			rf.mu.Unlock()
-			continue
-		}
-
-		size := len(rf.peers)
-		args := AppendEntriesArgs{}
-		args.Entries = make([]Log, 0)
-		args.Term = rf.currentTerm
-		me := rf.me
-		rf.mu.Unlock()
-		for i := 0; i < size; i++ {
-			if i != me {
-				reply := AppendEntriesReply{}
-				rf.sendAppendEntries(i, &args, &reply)
-			}
-		}
-	}
-}
-
+// 向所有节点发送竞选消息，并等待结果
 func (rf *Raft) startElection() {
 	size := len(rf.peers)
 
 	rf.mu.Lock()
 
 	rf.currentTerm++
+
+	//fmt.Println(rf.me, ", term:", rf.currentTerm, ", start election: ", time.Now())
+
 	rf.role = CANDIDATE
 	rf.votedFor = rf.me
 	args := RequestVoteArgs{}
@@ -297,27 +310,39 @@ func (rf *Raft) startElection() {
 
 	rf.mu.Unlock()
 
-	voteCnt := 1
+	// 并发发送竞选请求，以防 坏节点/网络问题 阻塞选举进程
+	voteChan := make(chan *RequestVoteReply)
 	for i := 0; i < size; i++ {
 		if i != rf.me {
 			reply := RequestVoteReply{}
-			ok := rf.sendRequestVote(i, &args, &reply)
-			if ok {
-				if reply.VoteGranted {
-					voteCnt++
-				} else {
-					rf.currentTerm = reply.Term
-					voteCnt = 0
-					break
-				}
-			}
+			go rf.sendRequestVote(i, &args, &reply, voteChan)
 		}
 	}
 
-	print("votecnt: ", voteCnt)
-	print(", server: ", rf.me)
-	print(", role: ", rf.role)
-	println()
+	success := false
+	for voteCnt, falseCnt := 1, 0; ; {
+		v := <-voteChan
+		if v.VoteGranted {
+			voteCnt++
+		} else {
+			falseCnt++
+		}
+
+		if falseCnt > size/2 {
+			break
+		}
+
+		if voteCnt > size/2 {
+			success = true
+			break
+		}
+	}
+
+	//print("\n", rf.me)
+	//print(", role: ", rf.role)
+	//print(", result: ", success)
+	//print(", term: ", rf.currentTerm)
+	//fmt.Println(", time:", time.Now())
 
 	// 在选举过程中，可能会收到其他 leader 的请求，转为 FOLLOWER
 	// 此时，无视选举结果，直接返回
@@ -325,7 +350,7 @@ func (rf *Raft) startElection() {
 		return
 	}
 
-	if voteCnt > size/2 {
+	if success {
 		rf.role = LEADER
 	} else {
 		rf.role = FOLLOWER
@@ -375,20 +400,18 @@ func (rf *Raft) killed() bool {
 
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
-
 		// Your code here (3A)
 		// Check if a leader election should be started.
-		if rf.role == FOLLOWER {
-			if rf.leaderExists {
-				rf.leaderExists = false
-			} else {
-				go rf.startElection()
-			}
+		if rf.role == FOLLOWER && !rf.leaderExists {
+			go rf.startElection()
 		}
+
+		// 每次 tick 都要刷新节点的 leaderExist，用于判断两次 tick 之间是否收到过 leader 的消息
+		rf.leaderExists = false
 
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
-		ms := 50 + (rand.Int63() % 300)
+		ms := 150 + (rand.Int63() % 450)
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
 }
