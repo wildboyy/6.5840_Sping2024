@@ -20,7 +20,17 @@ ld: warning: '/private/var/folders/yn/my4xqj9x2p5f7d3tmjmz51km0000gn/T/go-link-1
 
 用于将 Go 代码编译成动态链接库（在不同操作系统下表现形式有所不同，例如在 Linux 下是`.so`文件，在 Windows 下是`.dll`文件，在 macOS 下是`.dylib`文件等），使得这些代码可以在其他 Go 程序运行时被动态加载和使用，就像插件一样，为程序提供了一种灵活的扩展机制。
 
-## 思路：
+## WordCount
+
+课程中对于 WC 的拆分值得思考
+
+map 阶段仅仅将文件中的单词分离出来，以<word, '1'> 的方式写出，为什么不在 map 阶段就进行计数呢？原因有下
+
+1. mapreduce 从设计思想上来说，map 阶段是 IO 密集型的，reduce 阶段是计算密集型的。
+2. map 阶段计数的话，就要在内存中计数（hashmap），可能会导致内存不够
+3. 如果在 map 阶段计数，则产生了节点状态，有状态的情况下崩溃恢复会变得复杂，而且 mapreduce 遵循无状态原则
+
+## 核心思路：
 
 worker循环找master要任务，做任务
 

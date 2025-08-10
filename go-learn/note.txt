@@ -1,7 +1,0 @@
-$ go build -buildmode=plugin../mrapps/wc.go 
-
-命令解释：
-go build：这是 Go 语言的构建命令，用于将 Go 源文件编译为可执行文件或其他形式的二进制文件。
--buildmode=plugin：这是 go build 命令的一个参数，用于指定构建模式为 plugin。
-                    plugin 模式允许将 Go 代码编译为共享库，该共享库可以在运行时动态加载和调用，这为 Go 语言提供了动态扩展的能力。
-                    通过这种方式构建的 Go 代码可以被其他 Go 程序在运行时作为插件加载，实现插件化的架构，使得程序更加灵活和可扩展。
